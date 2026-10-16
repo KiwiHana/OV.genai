@@ -1,0 +1,80 @@
+ think this is necessary, it is useful information for the maintainers.
+Please run the following snippet and paste the output below:
+import platform; print(platform.platform())
+import sys; print("Python", sys.version)
+import numpy; print("Numpy", numpy.__version__)
+import astropy; print("astropy", astropy.__version__)
+import scipy; print("Scipy", scipy.__version__)
+import matplotlib; print("Matplotlib", matplotlib.__version__)
+-->
+```
+>>> import platform; print(platform.platform())
+Linux-5.11.10-arch1-1-x86_64-with-glibc2.33
+>>> import sys; print("Python", sys.version)
+Python 3.9.2 (default, Feb 20 2021, 18:40:11) 
+[GCC 10.2.0]
+>>> import numpy; print("Numpy", numpy.__version__)
+Numpy 1.20.2
+>>> import astropy; print("astropy", astropy.__version__)
+astropy 4.3.dev690+g7811614f8
+>>> import scipy; print("Scipy", scipy.__version__)
+Scipy 1.6.1
+>>> import matplotlib; print("Matplotlib", matplotlib.__version__)
+Matplotlib 3.3.4
+```
+'WCS.all_world2pix' failed to converge when plotting WCS with non linear distortions
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/master/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/master/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+<!-- Please check that the development version still produces the same bug.
+You can install development version with
+pip install git+https://github.com/astropy/astropy
+command. -->
+
+### Description
+When trying to plot an image with a WCS as projection that contains non linear Distortions it fails with a `NoConvergence` error.
+
+### Expected behavior
+When I add `quiet=True` as parameter to the call 
+```pixel = self.all_world2pix(*world_arrays, 0)``` 
+at line 326 of `astropy/wcs/wcsapi/fitswcs.py` I get the good enough looking plot below:
+
+![bugreport](https://user-images.githubusercontent.com/64231/112940287-37c2c800-912d-11eb-8ce8-56fd284bb8e7.png)
+
+It would be nice if there was a way of getting that plot without having to hack the library code like that.
+### Actual behavior
+<!-- What actually happened. -->
+<!-- Was the output confusing or poorly described? -->
+The call to plotting the grid fails with the following error (last few lines, can provide more if necessary):
+
+```
+~/work/develop/env/lib/python3.9/site-packages/astropy/wcs/wcsapi/fitswcs.py in world_to_pixel_values(self, *world_arrays)
+    324 
+    325     def world_to_pixel_values(self, *world_arrays):
+--> 326         pixel = self.all_world2pix(*world_arrays, 0)
+    327         return pixel[0] if self.pixel_n_dim == 1 else tuple(pixel)
+    328 
+
+~/work/develop/env/lib/python3.9/site-packages/astropy/utils/decorators.py in wrapper(*args, **kwargs)
+    534                     warnings.warn(message, warning_type, stacklevel=2)
+    535 
+--> 536             return function(*args, **kwargs)
+    537 
+    538         return wrapper
+
+~/work/develop/env/lib/python3.9/site-packages/astropy/wcs/wcs.py in all_world2pix(self, tolerance, maxiter, adaptive, detect_divergence, quiet, *args, **kwargs)
+   1886             raise ValueError("No basic WCS settings were created.")
+   1887 
+-> 1888         return self._array_converter(
+   
