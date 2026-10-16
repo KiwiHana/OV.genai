@@ -1,0 +1,363 @@
+
+-                    f"scale units not surface brightness: {self.scale.unit}"
+-                )
+-            # use the scale passed to get the value for scaling
+-            if hasattr(scale, "unit"):
+-                mult_scale = scale.value
+-            else:
+-                mult_scale = scale
+-            bb_unit = self.scale.unit
+-        else:
+-            mult_scale = scale
+-
+         # Check if input values are physically possible
+         if np.any(temp < 0):
+             raise ValueError(f"Temperature should be positive: {temp}")
+@@ -158,7 +180,17 @@ def evaluate(self, x, temperature, scale):
+         # Calculate blackbody flux
+         bb_nu = 2.0 * const.h * freq ** 3 / (const.c ** 2 * boltzm1) / u.sr
+ 
+-        y = mult_scale * bb_nu.to(bb_unit, u.spectral_density(freq))
++        if self.scale.unit is not None:
++            # Will be dimensionless at this point, but may not be dimensionless_unscaled
++            if not hasattr(scale, 'unit'):
++                # during fitting, scale will be passed without units
++                # but we still need to convert from the input dimensionless
++                # to dimensionless unscaled
++                scale = scale * self.scale.unit
++            scale = scale.to(u.dimensionless_unscaled).value
++
++        # NOTE: scale is already stripped of any input units
++        y = scale * bb_nu.to(self._output_units, u.spectral_density(freq))
+ 
+         # If the temperature parameter has no unit, we should return a unitless
+         # value. This occurs for instance during fitting, since we drop the
+@@ -169,10 +201,13 @@ def evaluate(self, x, temperature, scale):
+ 
+     @property
+     def input_units(self):
+-        # The input units are those of the 'x' value, which should always be
+-        # Hz. Because we do this, and because input_units_allow_dimensionless
+-        # is set to True, dimensionless values are assumed to be in Hz.
+-        return {self.inputs[0]: u.Hz}
++        # The input units are those of the 'x' value, which will depend on the
++        # units compatible with the expected output units.
++        if self._output_units.is_equivalent(self._native_output_units['SNU']):
++            return {self.inputs[0]: u.Hz}
++        else:
++            # only other option is equivalent with SLAM
++            return {self.inputs[0]: u.AA}
+ 
+     def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+         return {"temperature": u.K}
+@@ -180,9 +215,15 @@ def _parameter_units_for_data_units(self, inputs_unit, outputs_unit):
+     @property
+     def bolometric_flux(self):
+         """Bolometric flux."""
++        if self.scale.unit is not None:
++            # Will be dimensionless at this point, but may not be dimensionless_unscaled
++            scale = self.scale.quantity.to(u.dimensionless_unscaled)
++        else:
++            scale = self.scale.value
++
+         # bolometric flux in the native units of the planck function
+         native_bolflux = (
+-            self.scale.value * const.sigma_sb * self.temperature ** 4 / np.pi
++            scale * const.sigma_sb * self.temperature ** 4 / np.pi
+         )
+         # return in more "astro" units
+         return native_bolflux.to(u.erg / (u.cm ** 2 * u.s))
+
+
+Can Table masking be turned off?
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+### Description
+<!-- Provide a general description of the feature you would like. -->
+<!-- If you want to, you can suggest a draft design or API. -->
+<!-- This way we have a deeper discussion on the feature. -->
+
+As of Astropy 5, when `astropy.table.Table.read()` encounters values such as `NaN`, it automatically creates a `MaskedColumn` and the whole table becomes a `MaskedTable`.  While this might be useful for individual end-users, it is very inconvenient for intermediate data in pipelines.
+
+Here's the scenario: data are being passed via files and `Table.read()`.  A downstream function needs to replace `NaN` with valid values.  Previously those values could be easily identified (*e.g.* `np.isnan()` and replaced.  However, now additional work is need to look "underneath" the mask, extracting the actual values, replacing them, and then possibly creating a new, unmasked column, or even an entirely new table.
+
+Ideally, a keyword like `Table.read(filename, ..., mask=False)` would disable this behavior, for people who don't need this masking.
+
+
+diff --git a/astropy/io/fits/connect.py b/astropy/io/fits/connect.py
+--- a/astropy/io/fits/connect.py
++++ b/astropy/io/fits/connect.py
+@@ -112,7 +112,8 @@ def _decode_mixins(tbl):
+ 
+ 
+ def read_table_fits(input, hdu=None, astropy_native=False, memmap=False,
+-                    character_as_bytes=True, unit_parse_strict='warn'):
++                    character_as_bytes=True, unit_parse_strict='warn',
++                    mask_invalid=True):
+     """
+     Read a Table object from an FITS file
+ 
+@@ -145,6 +146,8 @@ def read_table_fits(input, hdu=None, astropy_native=False, memmap=False,
+         fit the table in memory, you may be better off leaving memory mapping
+         off. However, if your table would not fit in memory, you should set this
+         to `True`.
++        When set to `True` then ``mask_invalid`` is set to `False` since the
++        masking would cause loading the full data array.
+     character_as_bytes : bool, optional
+         If `True`, string columns are stored as Numpy byte arrays (dtype ``S``)
+         and are converted on-the-fly to unicode strings when accessing
+@@ -158,6 +161,11 @@ def read_table_fits(input, hdu=None, astropy_native=False, memmap=False,
+         :class:`~astropy.units.core.UnrecognizedUnit`.
+         Values are the ones allowed by the ``parse_strict`` argument of
+         :class:`~astropy.units.core.Unit`: ``raise``, ``warn`` and ``silent``.
++    mask_invalid : bool, optional
++        By default the code masks NaNs in float columns and empty strings in
++        string columns. Set this parameter to `False` to avoid the performance
++        penalty of doing this masking step. The masking is always deactivated
++        when using ``memmap=True`` (see above).
+ 
+     """
+ 
+@@ -214,6 +222,11 @@ def read_table_fits(input, hdu=None, astropy_native=False, memmap=False,
+ 
+     else:
+ 
++        if memmap:
++            # using memmap is not compatible with masking invalid value by
++            # default so we deactivate the masking
++            mask_invalid = False
++
+         hdulist = fits_open(input, character_as_bytes=character_as_bytes,
+                             memmap=memmap)
+ 
+@@ -222,6 +235,7 @@ def read_table_fits(input, hdu=None, astropy_native=False, memmap=False,
+                 hdulist, hdu=hdu,
+                 astropy_native=astropy_native,
+                 unit_parse_strict=unit_parse_strict,
++                mask_invalid=mask_invalid,
+             )
+         finally:
+             hdulist.close()
+@@ -246,9 +260,9 @@ def read_table_fits(input, hdu=None, astropy_native=False, memmap=False,
+             # Return a MaskedColumn even if no elements are masked so
+             # we roundtrip better.
+             masked = True
+-        elif issubclass(coltype, np.inexact):
++        elif mask_invalid and issubclass(coltype, np.inexact):
+             mask = np.isnan(data[col.name])
+-        elif issubclass(coltype, np.character):
++        elif mask_invalid and issubclass(coltype, np.character):
+             mask = col.array == b''
+ 
+         if masked or np.any(mask):
+
+
+SkyCoord in Table breaks aggregate on group_by
+### Description, actual behaviour, reproduction
+When putting a column of `SkyCoord`s in a `Table`, `aggregate` does not work on `group_by().groups`:
+
+```python
+from astropy.table import Table
+import astropy.units as u
+from astropy.coordinates import SkyCoord
+import numpy as np
+
+ras = [10, 20] * u.deg
+decs = [32, -2] * u.deg
+
+str_col = ['foo', 'bar']
+coords = SkyCoord(ra=ras, dec=decs)
+
+table = Table([str_col, coords], names=['col1', 'col2'])
+table.group_by('col1').groups.aggregate(np.mean)
+```
+
+ fails with 
+
+```
+Traceback (most recent call last):
+  File "repro.py", line 13, in <module>
+    table.group_by('col1').groups.aggregate(np.mean)
+  File "astropy/table/groups.py", line 357, in aggregate
+    new_col = col.groups.aggregate(func)
+  File "astropy/coordinates/sky_coordinate.py", line 835, in __getattr__
+    raise AttributeError("'{}' object has no attribute '{}'"
+AttributeError: 'SkyCoord' object has no attribute 'groups'
+```
+This happens irregardless of the aggregation function.
+
+### Expected behavior
+Aggregation works, only fails to aggregate columns where operation does not make sense.
+
+
+### System Details
+```
+Linux-5.14.11-arch1-1-x86_64-with-glibc2.33
+Python 3.9.7 (default, Aug 31 2021, 13:28:12) 
+[GCC 11.1.0]
+Numpy 1.21.2
+astropy 5.0.dev945+g7dfa1edb2
+(no scipy or matplotlib)
+```
+and
+```
+Linux-5.14.11-arch1-1-x86_64-with-glibc2.33
+Python 3.9.7 (default, Aug 31 2021, 13:28:12) 
+[GCC 11.1.0]
+Numpy 1.21.2
+astropy 4.3.1
+Scipy 1.7.1
+Matplotlib 3.4.3
+```
+
+
+
+diff --git a/astropy/table/column.py b/astropy/table/column.py
+--- a/astropy/table/column.py
++++ b/astropy/table/column.py
+@@ -340,7 +340,9 @@ class ColumnInfo(BaseColumnInfo):
+     This is required when the object is used as a mixin column within a table,
+     but can be used as a general way to store meta information.
+     """
+-    attrs_from_parent = BaseColumnInfo.attr_names
++    attr_names = BaseColumnInfo.attr_names | {'groups'}
++    _attrs_no_copy = BaseColumnInfo._attrs_no_copy | {'groups'}
++    attrs_from_parent = attr_names
+     _supports_indexing = True
+ 
+     def new_like(self, cols, length, metadata_conflicts='warn', name=None):
+diff --git a/astropy/table/groups.py b/astropy/table/groups.py
+--- a/astropy/table/groups.py
++++ b/astropy/table/groups.py
+@@ -214,7 +214,7 @@ def __len__(self):
+ class ColumnGroups(BaseGroups):
+     def __init__(self, parent_column, indices=None, keys=None):
+         self.parent_column = parent_column  # parent Column
+-        self.parent_table = parent_column.parent_table
++        self.parent_table = parent_column.info.parent_table
+         self._indices = indices
+         self._keys = keys
+ 
+@@ -238,7 +238,8 @@ def keys(self):
+             return self._keys
+ 
+     def aggregate(self, func):
+-        from .column import MaskedColumn
++        from .column import MaskedColumn, Column
++        from astropy.utils.compat import NUMPY_LT_1_20
+ 
+         i0s, i1s = self.indices[:-1], self.indices[1:]
+         par_col = self.parent_column
+@@ -248,6 +249,15 @@ def aggregate(self, func):
+         mean_case = func is np.mean
+         try:
+             if not masked and (reduceat or sum_case or mean_case):
++                # For numpy < 1.20 there is a bug where reduceat will fail to
++                # raise an exception for mixin columns that do not support the
++                # operation. For details see:
++                # https://github.com/astropy/astropy/pull/12825#issuecomment-1082412447
++                # Instead we try the function directly with a 2-element version
++                # of the column
++                if NUMPY_LT_1_20 and not isinstance(par_col, Column) and len(par_col) > 0:
++                    func(par_col[[0, 0]])
++
+                 if mean_case:
+                     vals = np.add.reduceat(par_col, i0s) / np.diff(self.indices)
+                 else:
+@@ -256,17 +266,18 @@ def aggregate(self, func):
+                     vals = func.reduceat(par_col, i0s)
+             else:
+                 vals = np.array([func(par_col[i0: i1]) for i0, i1 in zip(i0s, i1s)])
++            out = par_col.__class__(vals)
+         except Exception as err:
+-            raise TypeError("Cannot aggregate column '{}' with type '{}'"
+-                            .format(par_col.info.name,
+-                                    par_col.info.dtype)) from err
+-
+-        out = par_col.__class__(data=vals,
+-                                name=par_col.info.name,
+-                                description=par_col.info.description,
+-                                unit=par_col.info.unit,
+-                                format=par_col.info.format,
+-                                meta=par_col.info.meta)
++            raise TypeError("Cannot aggregate column '{}' with type '{}': {}"
++                            .format(par_col.info.name, par_col.info.dtype, err)) from err
++
++        out_info = out.info
++        for attr in ('name', 'unit', 'format', 'description', 'meta'):
++            try:
++                setattr(out_info, attr, getattr(par_col.info, attr))
++            except AttributeError:
++                pass
++
+         return out
+ 
+     def filter(self, func):
+@@ -354,7 +365,7 @@ def aggregate(self, func):
+                 new_col = col.take(i0s)
+             else:
+                 try:
+-                    new_col = col.groups.aggregate(func)
++                    new_col = col.info.groups.aggregate(func)
+                 except TypeError as err:
+                     warnings.warn(str(err), AstropyUserWarning)
+                     continue
+diff --git a/astropy/utils/data_info.py b/astropy/utils/data_info.py
+--- a/astropy/utils/data_info.py
++++ b/astropy/utils/data_info.py
+@@ -511,7 +511,7 @@ class BaseColumnInfo(DataInfo):
+     Note that this class is defined here so that mixins can use it
+     without importing the table package.
+     """
+-    attr_names = DataInfo.attr_names.union(['parent_table', 'indices'])
++    attr_names = DataInfo.attr_names | {'parent_table', 'indices'}
+     _attrs_no_copy = set(['parent_table', 'indices'])
+ 
+     # Context for serialization.  This can be set temporarily via
+@@ -752,6 +752,15 @@ def name(self, name):
+ 
+         self._attrs['name'] = name
+ 
++    @property
++    def groups(self):
++        # This implementation for mixin columns essentially matches the Column
++        # property definition.  `groups` is a read-only property here and
++        # depends on the parent table of the column having `groups`. This will
++        # allow aggregating mixins as long as they support those operations.
++        from astropy.table import groups
++        return self._attrs.setdefault('groups', groups.ColumnGroups(self._parent))
++
+ 
+ class ParentDtypeInfo(MixinInfo):
+     """Mixin that gets info.dtype from parent"""
+
+
+No longer able to read BinnedTimeSeries with datetime column saved as ECSV after upgrading from 4.2.1 -> 5.0+
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+<!-- Please check that the development version still produces the same bug.
+You can install development version with
