@@ -1,0 +1,58 @@
+args, **kwargs:
+-> 1890             self._all_world2pix(
+   1891                 *args, tolerance=tolerance, maxiter=maxiter,
+   1892                 adaptive=adaptive, detect_divergence=detect_divergence,
+
+~/work/develop/env/lib/python3.9/site-packages/astropy/wcs/wcs.py in _all_world2pix(self, world, origin, tolerance, maxiter, adaptive, detect_divergence, quiet)
+   1869                     slow_conv=ind, divergent=None)
+   1870             else:
+-> 1871                 raise NoConvergence(
+   1872                     "'WCS.all_world2pix' failed to "
+   1873                     "converge to the requested accuracy.\n"
+
+NoConvergence: 'WCS.all_world2pix' failed to converge to the requested accuracy.
+After 20 iterations, the solution is diverging at least for one input point.
+```
+
+### Steps to Reproduce
+<!-- Ideally a code example could be provided so we can run it ourselves. -->
+<!-- If you are pasting code, use triple backticks (```) around
+your code snippet. -->
+<!-- If necessary, sanitize your screen output to be pasted so you do not
+reveal secrets like tokens and passwords. -->
+
+Here is the code to reproduce the problem:
+```
+from astropy.wcs import WCS, Sip
+import numpy as np
+import matplotlib.pyplot as plt
+
+wcs = WCS(naxis=2)
+a = [[ 0.00000000e+00,  0.00000000e+00,  6.77532513e-07,
+        -1.76632141e-10],
+       [ 0.00000000e+00,  9.49130161e-06, -1.50614321e-07,
+         0.00000000e+00],
+       [ 7.37260409e-06,  2.07020239e-09,  0.00000000e+00,
+         0.00000000e+00],
+       [-1.20116753e-07,  0.00000000e+00,  0.00000000e+00,
+         0.00000000e+00]]
+b = [[ 0.00000000e+00,  0.00000000e+00,  1.34606617e-05,
+        -1.41919055e-07],
+       [ 0.00000000e+00,  5.85158316e-06, -1.10382462e-09,
+         0.00000000e+00],
+       [ 1.06306407e-05, -1.36469008e-07,  0.00000000e+00,
+         0.00000000e+00],
+       [ 3.27391123e-09,  0.00000000e+00,  0.00000000e+00,
+         0.00000000e+00]]
+crpix = [1221.87375165,  994.90917378]
+ap = bp = np.zeros((4, 4))
+
+wcs.sip = Sip(a, b, ap, bp, crpix)
+
+plt.subplot(projection=wcs)
+plt.imshow(np.zeros((1944, 2592)))
+plt.grid(color='white', ls='solid')
+```
+
+### System Details
+<!-- Even if you do not
