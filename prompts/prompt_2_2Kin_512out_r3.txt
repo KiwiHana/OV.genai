@@ -1,0 +1,176 @@
+  5.85158316e-06, -1.10382462e-09,
+         0.00000000e+00],
+       [ 1.06306407e-05, -1.36469008e-07,  0.00000000e+00,
+         0.00000000e+00],
+       [ 3.27391123e-09,  0.00000000e+00,  0.00000000e+00,
+         0.00000000e+00]]
+crpix = [1221.87375165,  994.90917378]
+ap = bp = np.zeros((4, 4))
+
+wcs.sip = Sip(a, b, ap, bp, crpix)
+
+plt.subplot(projection=wcs)
+plt.imshow(np.zeros((1944, 2592)))
+plt.grid(color='white', ls='solid')
+```
+
+### System Details
+<!-- Even if you do not think this is necessary, it is useful information for the maintainers.
+Please run the following snippet and paste the output below:
+import platform; print(platform.platform())
+import sys; print("Python", sys.version)
+import numpy; print("Numpy", numpy.__version__)
+import astropy; print("astropy", astropy.__version__)
+import scipy; print("Scipy", scipy.__version__)
+import matplotlib; print("Matplotlib", matplotlib.__version__)
+-->
+```
+>>> import platform; print(platform.platform())
+Linux-5.11.10-arch1-1-x86_64-with-glibc2.33
+>>> import sys; print("Python", sys.version)
+Python 3.9.2 (default, Feb 20 2021, 18:40:11) 
+[GCC 10.2.0]
+>>> import numpy; print("Numpy", numpy.__version__)
+Numpy 1.20.2
+>>> import astropy; print("astropy", astropy.__version__)
+astropy 4.3.dev690+g7811614f8
+>>> import scipy; print("Scipy", scipy.__version__)
+Scipy 1.6.1
+>>> import matplotlib; print("Matplotlib", matplotlib.__version__)
+Matplotlib 3.3.4
+```
+
+diff --git a/astropy/wcs/wcsapi/fitswcs.py b/astropy/wcs/wcsapi/fitswcs.py
+--- a/astropy/wcs/wcsapi/fitswcs.py
++++ b/astropy/wcs/wcsapi/fitswcs.py
+@@ -323,7 +323,17 @@ def pixel_to_world_values(self, *pixel_arrays):
+         return world[0] if self.world_n_dim == 1 else tuple(world)
+ 
+     def world_to_pixel_values(self, *world_arrays):
+-        pixel = self.all_world2pix(*world_arrays, 0)
++        # avoid circular import
++        from astropy.wcs.wcs import NoConvergence
++        try:
++            pixel = self.all_world2pix(*world_arrays, 0)
++        except NoConvergence as e:
++            warnings.warn(str(e))
++            # use best_solution contained in the exception and format the same
++            # way as all_world2pix does (using _array_converter)
++            pixel = self._array_converter(lambda *args: e.best_solution,
++                                         'input', *world_arrays, 0)
++
+         return pixel[0] if self.pixel_n_dim == 1 else tuple(pixel)
+ 
+     @property
+
+
+Add helpers to convert between different types of uncertainties
+Currently there no easy way to convert from an arbitrary uncertainty class to a different uncertainty class. This would be useful to be able to pass NDData objects to external libraries/tools which assume, for example, that uncertainties will always stored as variances. Here's some really scrappy code I bunged together quickly for my purposes (probably buggy, I need to properly test it), but what are peoples opinions on what's the best API/design/framework for such a system?
+
+```python
+from astropy.nddata import (
+    VarianceUncertainty, StdDevUncertainty, InverseVariance,
+)
+
+def std_to_var(obj):
+    return VarianceUncertainty(obj.array ** 2, unit=obj.unit ** 2)
+
+
+def var_to_invvar(obj):
+    return InverseVariance(obj.array ** -1, unit=obj.unit ** -1)
+
+
+def invvar_to_var(obj):
+    return VarianceUncertainty(obj.array ** -1, unit=obj.unit ** -1)
+
+
+def var_to_std(obj):
+    return VarianceUncertainty(obj.array ** 1/2, unit=obj.unit ** 1/2)
+
+
+FUNC_MAP = {
+    (StdDevUncertainty, VarianceUncertainty): std_to_var,
+    (StdDevUncertainty, InverseVariance): lambda x: var_to_invvar(
+        std_to_var(x)
+    ),
+    (VarianceUncertainty, StdDevUncertainty): var_to_std,
+    (VarianceUncertainty, InverseVariance): var_to_invvar,
+    (InverseVariance, StdDevUncertainty): lambda x: var_to_std(
+        invvar_to_var(x)
+    ),
+    (InverseVariance, VarianceUncertainty): invvar_to_var,
+    (StdDevUncertainty, StdDevUncertainty): lambda x: x,
+    (VarianceUncertainty, VarianceUncertainty): lambda x: x,
+    (InverseVariance, InverseVariance): lambda x: x,
+}
+
+
+def convert_uncertainties(obj, new_class):
+    return FUNC_MAP[(type(obj), new_class)](obj)
+```
+
+diff --git a/astropy/nddata/nduncertainty.py b/astropy/nddata/nduncertainty.py
+--- a/astropy/nddata/nduncertainty.py
++++ b/astropy/nddata/nduncertainty.py
+@@ -395,6 +395,40 @@ def _propagate_multiply(self, other_uncert, result_data, correlation):
+     def _propagate_divide(self, other_uncert, result_data, correlation):
+         return None
+ 
++    def represent_as(self, other_uncert):
++        """Convert this uncertainty to a different uncertainty type.
++
++        Parameters
++        ----------
++        other_uncert : `NDUncertainty` subclass
++            The `NDUncertainty` subclass to convert to.
++
++        Returns
++        -------
++        resulting_uncertainty : `NDUncertainty` instance
++            An instance of ``other_uncert`` subclass containing the uncertainty
++            converted to the new uncertainty type.
++
++        Raises
++        ------
++        TypeError
++            If either the initial or final subclasses do not support
++            conversion, a `TypeError` is raised.
++        """
++        as_variance = getattr(self, "_convert_to_variance", None)
++        if as_variance is None:
++            raise TypeError(
++                f"{type(self)} does not support conversion to another "
++                "uncertainty type."
++            )
++        from_variance = getattr(other_uncert, "_convert_from_variance", None)
++        if from_variance is None:
++            raise TypeError(
++                f"{other_uncert.__name__} does not support conversion from "
++                "another uncertainty type."
++            )
++        return from_variance(as_variance())
++
+ 
+ class UnknownUncertainty(NDUncertainty):
+     """This class implements any unknown uncertainty type.
+@@ -748,6 +782,17 @@ def _propagate_divide(self, other_uncert, result_data, correlation):
+     def _data_unit_to_uncertainty_unit(self, value):
+         return value
+ 
++    def _convert_to_variance(self):
++        new_array = None if self.array is None else self.array ** 2
++        new_unit = None if self.unit is None else self.unit ** 2
++        return VarianceUncertainty(new_array, unit=new_unit)
++
++    @classmethod
++    def _convert_from_variance(cls, var_uncert):
++        new_array = None if var_uncert.array is None else var_uncert.array ** (1 / 2)
++        new_unit = None if var_uncert.unit is None else var_uncert.unit ** (1 / 2)
++        return cls(new_array, unit=new_unit)
++
+ 
+ class VarianceUncertainty(_VariancePropagationMixin, NDUncertainty):
+     """
+@@ -834,6 +879,13 @@ def _propagate_divide(self, other_uncert, result_data, correlation):
+     def _data_unit_to_uncertainty_unit(self, value):
+        
