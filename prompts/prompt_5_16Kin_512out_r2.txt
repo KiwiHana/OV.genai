@@ -1,0 +1,1367 @@
+ the equator of the Celestial Intermediate Pole (CIP) and is rigorously
+         corrected for polar motion (except when ``longitude='tio'`` or ``'greenwich'``).
+ 
+-        """  # docstring is formatted below
++        """  # noqa (docstring is formatted below)
+ 
+         if kind.lower() not in SIDEREAL_TIME_MODELS.keys():
+             raise ValueError('The kind of sidereal time has to be {}'.format(
+@@ -1929,7 +1977,7 @@ def _sid_time_or_earth_rot_ang(self, longitude, function, scales, include_tio=Tr
+         `~astropy.coordinates.Longitude`
+             Local sidereal time or Earth rotation angle, with units of hourangle.
+ 
+-        """
++        """  # noqa
+         from astropy.coordinates import Longitude, EarthLocation
+         from astropy.coordinates.builtin_frames.utils import get_polar_motion
+         from astropy.coordinates.matrix_utilities import rotation_matrix
+@@ -1956,7 +2004,7 @@ def _sid_time_or_earth_rot_ang(self, longitude, function, scales, include_tio=Tr
+             r = (rotation_matrix(longitude, 'z')
+                  @ rotation_matrix(-yp, 'x', unit=u.radian)
+                  @ rotation_matrix(-xp, 'y', unit=u.radian)
+-                 @ rotation_matrix(theta+sp, 'z', unit=u.radian))
++                 @ rotation_matrix(theta + sp, 'z', unit=u.radian))
+             # Solve for angle.
+             angle = np.arctan2(r[..., 0, 1], r[..., 0, 0]) << u.radian
+ 
+@@ -2781,7 +2829,6 @@ def __init__(self, left, right, op=None):
+ def _check_leapsec():
+     global _LEAP_SECONDS_CHECK
+     if _LEAP_SECONDS_CHECK != _LeapSecondsCheck.DONE:
+-        from astropy.utils import iers
+         with _LEAP_SECONDS_LOCK:
+             # There are three ways we can get here:
+             # 1. First call (NOT_STARTED).
+diff --git a/astropy/time/formats.py b/astropy/time/formats.py
+--- a/astropy/time/formats.py
++++ b/astropy/time/formats.py
+@@ -1745,7 +1745,7 @@ class TimeBesselianEpoch(TimeEpochDate):
+ 
+     def _check_val_type(self, val1, val2):
+         """Input value validation, typically overridden by derived classes"""
+-        if hasattr(val1, 'to') and hasattr(val1, 'unit'):
++        if hasattr(val1, 'to') and hasattr(val1, 'unit') and val1.unit is not None:
+             raise ValueError("Cannot use Quantities for 'byear' format, "
+                              "as the interpretation would be ambiguous. "
+                              "Use float with Besselian year instead. ")
+
+
+No longer able to read BinnedTimeSeries with datetime column saved as ECSV after upgrading from 4.2.1 -> 5.0+
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+<!-- Please check that the development version still produces the same bug.
+You can install development version with
+pip install git+https://github.com/astropy/astropy
+command. -->
+
+### Description
+<!-- Provide a general description of the bug. -->
+Hi, [This commit](https://github.com/astropy/astropy/commit/e807dbff9a5c72bdc42d18c7d6712aae69a0bddc) merged in PR #11569 breaks my ability to read an ECSV file created using Astropy v 4.2.1, BinnedTimeSeries class's write method, which has a datetime64 column. Downgrading astropy back to 4.2.1 fixes the issue because the strict type checking in line 177 of ecsv.py is not there.
+
+Is there a reason why this strict type checking was added to ECSV? Is there a way to preserve reading and writing of ECSV files created with BinnedTimeSeries across versions? I am happy to make a PR on this if the strict type checking is allowed to be scaled back or we can add datetime64 as an allowed type. 
+
+### Expected behavior
+<!-- What did you expect to happen. -->
+
+The file is read into a `BinnedTimeSeries` object from ecsv file without error.
+
+### Actual behavior
+<!-- What actually happened. -->
+<!-- Was the output confusing or poorly described? -->
+
+ValueError is produced and the file is not read because ECSV.py does not accept the datetime64 column.
+`ValueError: datatype 'datetime64' of column 'time_bin_start' is not in allowed values ('bool', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64', 'float16', 'float32', 'float64', 'float128', 'string')`
+
+### Steps to Reproduce
+<!-- Ideally a code example could be provided so we can run it ourselves. -->
+<!-- If you are pasting code, use triple backticks (```) around
+your code snippet. -->
+<!-- If necessary, sanitize your screen output to be pasted so you do not
+reveal secrets like tokens and passwords. -->
+
+The file is read using:    
+`BinnedTimeSeries.read('<file_path>', format='ascii.ecsv')`
+which gives a long error. 
+
+
+The file in question is a binned time series created by  `astropy.timeseries.aggregate_downsample`. which itself is a binned version of an `astropy.timeseries.TimeSeries` instance with some TESS data. (loaded via TimeSeries.from_pandas(Tess.set_index('datetime')). I.e., it has a datetime64 index.  The file was written using the classes own .write method in Astropy V4.2.1 from an instance of said class:   
+`myBinnedTimeSeries.write('<file_path>',format='ascii.ecsv',overwrite=True)`
+
+I'll attach a concatenated version of the file (as it contains private data). However, the relevant part from the header is on line 4:
+
+```
+# %ECSV 0.9
+# ---
+# datatype:
+# - {name: time_bin_start, datatype: datetime64}
+```
+
+as you can see, the datatype is datetime64. This works fine with ECSV V0.9 but not V1.0 as some sort of strict type checking was added. 
+
+### 
+Full error log:
+```
+---------------------------------------------------------------------------
+ValueError                                Traceback (most recent call last)
+Input In [3], in <module>
+---> 49 tsrbin = BinnedTimeSeries.read('../Photometry/tsr_bin.dat', format='ascii.ecsv')
+
+File ~/Apps/miniconda3/envs/py310_latest/lib/python3.10/site-packages/astropy/timeseries/binned.py:285, in BinnedTimeSeries.read(self, filename, time_bin_start_column, time_bin_end_column, time_bin_size_column, time_bin_size_unit, time_format, time_scale, format, *args, **kwargs)
+    230 """
+    231 Read and parse a file and returns a `astropy.timeseries.BinnedTimeSeries`.
+    232 
+   (...)
+    279 
+    280 """
+    282 try:
+    283 
+    284     # First we try the readers defined for the BinnedTimeSeries class
+--> 285     return super().read(filename, format=format, *args, **kwargs)
+    287 except TypeError:
+    288 
+    289     # Otherwise we fall back to the default Table readers
+    291     if time_bin_start_column is None:
+
+File ~/Apps/miniconda3/envs/py310_latest/lib/python3.10/site-packages/astropy/table/connect.py:62, in TableRead.__call__(self, *args, **kwargs)
+     59 units = kwargs.pop('units', None)
+     60 descriptions = kwargs.pop('descriptions', None)
+---> 62 out = self.registry.read(cls, *args, **kwargs)
+     64 # For some readers (e.g., ascii.ecsv), the returned `out` class is not
+     65 # guaranteed to be the same as the desired output `cls`.  If so,
+     66 # try coercing to desired class without copying (io.registry.read
+     67 # would normally do a copy).  The normal case here is swapping
+     68 # Table <=> QTable.
+     69 if cls is not out.__class__:
+
+File ~/Apps/miniconda3/envs/py310_latest/lib/python3.10/site-packages/astropy/io/registry/core.py:199, in UnifiedInputRegistry.read(self, cls, format, cache, *args, **kwargs)
+    195     format = self._get_valid_format(
+    196         'read', cls, path, fileobj, args, kwargs)
+    198 reader = self.get_reader(format, cls)
+--> 199 data = reader(*args, **kwargs)
+    201 if not isinstance(data, cls):
+    202     # User has read with a subclass where only the parent class is
+    203     # registered.  This returns the parent class, so try coercing
+    204     # to desired subclass.
+    205     try:
+
+File ~/Apps/miniconda3/envs/py310_latest/lib/python3.10/site-packages/astropy/io/ascii/connect.py:18, in io_read(format, filename, **kwargs)
+     16     format = re.sub(r'^ascii\.', '', format)
+     17     kwargs['format'] = format
+---> 18 return read(filename, **kwargs)
+
+File ~/Apps/miniconda3/envs/py310_latest/lib/python3.10/site-packages/astropy/io/ascii/ui.py:376, in read(table, guess, **kwargs)
+    374     else:
+    375         reader = get_reader(**new_kwargs)
+--> 376         dat = reader.read(table)
+    377         _read_trace.append({'kwargs': copy.deepcopy(new_kwargs),
+    378                             'Reader': reader.__class__,
+    379                             'status': 'Success with specified Reader class '
+    380                                       '(no guessing)'})
+    382 # Static analysis (pyright) indicates `dat` might be left undefined, so just
+    383 # to be sure define it at the beginning and check here.
+
+File ~/Apps/miniconda3/envs/py310_latest/lib/python3.10/site-packages/astropy/io/ascii/core.py:1343, in BaseReader.read(self, table)
+   1340 self.header.update_meta(self.lines, self.meta)
+   1342 # Get the table column definitions
+-> 1343 self.header.get_cols(self.lines)
+   1345 # Make sure columns are valid
+   1346 self.header.check_column_names(self.names, self.strict_names, self.guessing)
+
+File ~/Apps/miniconda3/envs/py310_latest/lib/python3.10/site-packages/astropy/io/ascii/ecsv.py:177, in EcsvHeader.get_cols(self, lines)
+    175 col.dtype = header_cols[col.name]['datatype']
+    176 if col.dtype not in ECSV_DATATYPES:
+--> 177     raise ValueError(f'datatype {col.dtype!r} of column {col.name!r} '
+    178                      f'is not in allowed values {ECSV_DATATYPES}')
+    180 # Subtype is written like "int64[2,null]" and we want to split this
+    181 # out to "int64" and [2, None].
+    182 subtype = col.subtype
+
+ValueError: datatype 'datetime64' of column 'time_bin_start' is not in allowed values ('bool', 'int8', 'int16', 'int32', 'int64', 'uint8', 'uint16', 'uint32', 'uint64', 'float16', 'float32', 'float64', 'float128', 'string')
+```
+### System Details
+<!-- Even if you do not think this is necessary, it is useful information for the maintainers.
+Please run the following snippet and paste the output below:
+import platform; print(platform.platform())
+import sys; print("Python", sys.version)
+import numpy; print("Numpy", numpy.__version__)
+import erfa; print("pyerfa", erfa.__version__)
+import astropy; print("astropy", astropy.__version__)
+import scipy; print("Scipy", scipy.__version__)
+import matplotlib; print("Matplotlib", matplotlib.__version__)
+-->
+(For the version that does not work)
+Python 3.10.2 | packaged by conda-forge | (main, Feb  1 2022, 19:28:35) [GCC 9.4.0]
+Numpy 1.22.2
+pyerfa 2.0.0.1
+astropy 5.0.1
+Scipy 1.8.0
+Matplotlib 3.5.1
+
+(For the version that does work)
+Python 3.7.11 (default, Jul 27 2021, 14:32:16) [GCC 7.5.0]
+Numpy 1.20.3
+pyerfa 2.0.0.1
+astropy 4.2.1
+Scipy 1.7.0
+Matplotlib 3.4.2
+
+
+diff --git a/astropy/io/ascii/ecsv.py b/astropy/io/ascii/ecsv.py
+--- a/astropy/io/ascii/ecsv.py
++++ b/astropy/io/ascii/ecsv.py
+@@ -129,7 +129,9 @@ def get_cols(self, lines):
+         match = re.match(ecsv_header_re, lines[0].strip(), re.VERBOSE)
+         if not match:
+             raise core.InconsistentTableError(no_header_msg)
+-        # ecsv_version could be constructed here, but it is not currently used.
++
++        # Construct ecsv_version for backwards compatibility workarounds.
++        self.ecsv_version = tuple(int(v or 0) for v in match.groups())
+ 
+         try:
+             header = meta.get_header_from_yaml(lines)
+@@ -173,7 +175,11 @@ def get_cols(self, lines):
+                     setattr(col, attr, header_cols[col.name][attr])
+ 
+             col.dtype = header_cols[col.name]['datatype']
+-            if col.dtype not in ECSV_DATATYPES:
++            # Require col dtype to be a valid ECSV datatype. However, older versions
++            # of astropy writing ECSV version 0.9 and earlier had inadvertently allowed
++            # numpy datatypes like datetime64 or object or python str, which are not in the ECSV standard.
++            # For back-compatibility with those existing older files, allow reading with no error.
++            if col.dtype not in ECSV_DATATYPES and self.ecsv_version > (0, 9, 0):
+                 raise ValueError(f'datatype {col.dtype!r} of column {col.name!r} '
+                                  f'is not in allowed values {ECSV_DATATYPES}')
+ 
+
+
+The `where` keyword argument of `np.mean` is not supported for `astropy.units.Quantity` instances.
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+### Description
+<!-- Provide a general description of the feature you would like. -->
+<!-- If you want to, you can suggest a draft design or API. -->
+<!-- This way we have a deeper discussion on the feature. -->
+
+Apologies if there is a duplicate somewhere, I scoured all the issues for this problem and I couldn't find it mentioned yet.
+
+The `where` keyword argument was added to `np.mean` and all the other `np.reduce`-based functions in version 1.20.0 of numpy,
+but it doesn't seem to work yet with `astopy.units.Quantity`.
+
+Does anyone know if there is some limitation in `astropy.units.Quantity` that is preventing this feature from being implemented?
+
+If not, I could put some time towards updating `astropy.units.Quantity` to support this feature.
+
+### Additional context
+<!-- Add any other context or screenshots about the feature request here. -->
+<!-- This part is optional. -->
+
+
+diff --git a/astropy/units/quantity.py b/astropy/units/quantity.py
+--- a/astropy/units/quantity.py
++++ b/astropy/units/quantity.py
+@@ -18,6 +18,7 @@
+ 
+ # LOCAL
+ from astropy import config as _config
++from astropy.utils.compat import NUMPY_LT_1_20, NUMPY_LT_1_22
+ from astropy.utils.compat.misc import override__dir__
+ from astropy.utils.data_info import ParentDtypeInfo
+ from astropy.utils.exceptions import AstropyDeprecationWarning, AstropyWarning
+@@ -1788,19 +1789,34 @@ def _wrap_function(self, function, *args, unit=None, out=None, **kwargs):
+     def trace(self, offset=0, axis1=0, axis2=1, dtype=None, out=None):
+         return self._wrap_function(np.trace, offset, axis1, axis2, dtype,
+                                    out=out)
+-
+-    def var(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
+-        return self._wrap_function(np.var, axis, dtype,
+-                                   out=out, ddof=ddof, keepdims=keepdims,
+-                                   unit=self.unit**2)
+-
+-    def std(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
+-        return self._wrap_function(np.std, axis, dtype, out=out, ddof=ddof,
+-                                   keepdims=keepdims)
+-
+-    def mean(self, axis=None, dtype=None, out=None, keepdims=False):
+-        return self._wrap_function(np.mean, axis, dtype, out=out,
+-                                   keepdims=keepdims)
++    if NUMPY_LT_1_20:
++        def var(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
++            return self._wrap_function(np.var, axis, dtype,
++                                       out=out, ddof=ddof, keepdims=keepdims,
++                                       unit=self.unit**2)
++    else:
++        def var(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False, *, where=True):
++            return self._wrap_function(np.var, axis, dtype,
++                                       out=out, ddof=ddof, keepdims=keepdims, where=where,
++                                       unit=self.unit**2)
++
++    if NUMPY_LT_1_20:
++        def std(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
++            return self._wrap_function(np.std, axis, dtype, out=out, ddof=ddof,
++                                       keepdims=keepdims)
++    else:
++        def std(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False, *, where=True):
++            return self._wrap_function(np.std, axis, dtype, out=out, ddof=ddof,
++                                       keepdims=keepdims, where=where)
++
++    if NUMPY_LT_1_20:
++        def mean(self, axis=None, dtype=None, out=None, keepdims=False):
++            return self._wrap_function(np.mean, axis, dtype, out=out,
++                                       keepdims=keepdims)
++    else:
++        def mean(self, axis=None, dtype=None, out=None, keepdims=False, *, where=True):
++            return self._wrap_function(np.mean, axis, dtype, out=out,
++                                       keepdims=keepdims, where=where)
+ 
+     def round(self, decimals=0, out=None):
+         return self._wrap_function(np.round, decimals, out=out)
+@@ -1827,9 +1843,14 @@ def diff(self, n=1, axis=-1):
+     def ediff1d(self, to_end=None, to_begin=None):
+         return self._wrap_function(np.ediff1d, to_end, to_begin)
+ 
+-    def nansum(self, axis=None, out=None, keepdims=False):
+-        return self._wrap_function(np.nansum, axis,
+-                                   out=out, keepdims=keepdims)
++    if NUMPY_LT_1_22:
++        def nansum(self, axis=None, out=None, keepdims=False):
++            return self._wrap_function(np.nansum, axis,
++                                       out=out, keepdims=keepdims)
++    else:
++        def nansum(self, axis=None, out=None, keepdims=False, *, initial=None, where=True):
++            return self._wrap_function(np.nansum, axis,
++                                       out=out, keepdims=keepdims, initial=initial, where=where)
+ 
+     def insert(self, obj, values, axis=None):
+         """
+diff --git a/astropy/utils/masked/core.py b/astropy/utils/masked/core.py
+--- a/astropy/utils/masked/core.py
++++ b/astropy/utils/masked/core.py
+@@ -1043,7 +1043,7 @@ def clip(self, min=None, max=None, out=None, **kwargs):
+             np.minimum(out, dmax, out=out, where=True if mmax is None else ~mmax)
+         return masked_out
+ 
+-    def mean(self, axis=None, dtype=None, out=None, keepdims=False):
++    def mean(self, axis=None, dtype=None, out=None, keepdims=False, *, where=True):
+         # Implementation based on that in numpy/core/_methods.py
+         # Cast bool, unsigned int, and int to float64 by default,
+         # and do float16 at higher precision.
+@@ -1055,38 +1055,42 @@ def mean(self, axis=None, dtype=None, out=None, keepdims=False):
+                 dtype = np.dtype('f4')
+                 is_float16_result = out is None
+ 
++        where = ~self.mask & where
++
+         result = self.sum(axis=axis, dtype=dtype, out=out,
+-                          keepdims=keepdims, where=~self.mask)
+-        n = np.add.reduce(~self.mask, axis=axis, keepdims=keepdims)
++                          keepdims=keepdims, where=where)
++        n = np.add.reduce(where, axis=axis, keepdims=keepdims)
+         result /= n
+         if is_float16_result:
+             result = result.astype(self.dtype)
+         return result
+ 
+-    def var(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
++    def var(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False, *, where=True):
++        where_final = ~self.mask & where
++
+         # Simplified implementation based on that in numpy/core/_methods.py
+-        n = np.add.reduce(~self.mask, axis=axis, keepdims=keepdims)[...]
++        n = np.add.reduce(where_final, axis=axis, keepdims=keepdims)[...]
+ 
+         # Cast bool, unsigned int, and int to float64 by default.
+         if dtype is None and issubclass(self.dtype.type,
+                                         (np.integer, np.bool_)):
+             dtype = np.dtype('f8')
+-        mean = self.mean(axis=axis, dtype=dtype, keepdims=True)
++        mean = self.mean(axis=axis, dtype=dtype, keepdims=True, where=where)
+ 
+         x = self - mean
+         x *= x.conjugate()  # Conjugate just returns x if not complex.
+ 
+         result = x.sum(axis=axis, dtype=dtype, out=out,
+-                       keepdims=keepdims, where=~x.mask)
++                       keepdims=keepdims, where=where_final)
+         n -= ddof
+         n = np.maximum(n, 0, out=n)
+         result /= n
+         result._mask |= (n == 0)
+         return result
+ 
+-    def std(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False):
++    def std(self, axis=None, dtype=None, out=None, ddof=0, keepdims=False, *, where=True):
+         result = self.var(axis=axis, dtype=dtype, out=out, ddof=ddof,
+-                          keepdims=keepdims)
++                          keepdims=keepdims, where=where)
+         return np.sqrt(result, out=result)
+ 
+     def __bool__(self):
+@@ -1094,13 +1098,13 @@ def __bool__(self):
+         result = super().__bool__()
+         return result and not self.mask
+ 
+-    def any(self, axis=None, out=None, keepdims=False):
++    def any(self, axis=None, out=None, keepdims=False, *, where=True):
+         return np.logical_or.reduce(self, axis=axis, out=out,
+-                                    keepdims=keepdims, where=~self.mask)
++                                    keepdims=keepdims, where=~self.mask & where)
+ 
+-    def all(self, axis=None, out=None, keepdims=False):
++    def all(self, axis=None, out=None, keepdims=False, *, where=True):
+         return np.logical_and.reduce(self, axis=axis, out=out,
+-                                     keepdims=keepdims, where=~self.mask)
++                                     keepdims=keepdims, where=~self.mask & where)
+ 
+     # Following overrides needed since somehow the ndarray implementation
+     # does not actually call these.
+
+
+Modeling's `separability_matrix` does not compute separability correctly for nested CompoundModels
+Consider the following model:
+
+```python
+from astropy.modeling import models as m
+from astropy.modeling.separable import separability_matrix
+
+cm = m.Linear1D(10) & m.Linear1D(5)
+```
+
+It's separability matrix as you might expect is a diagonal:
+
+```python
+>>> separability_matrix(cm)
+array([[ True, False],
+       [False,  True]])
+```
+
+If I make the model more complex:
+```python
+>>> separability_matrix(m.Pix2Sky_TAN() & m.Linear1D(10) & m.Linear1D(5))
+array([[ True,  True, False, False],
+       [ True,  True, False, False],
+       [False, False,  True, False],
+       [False, False, False,  True]])
+```
+
+The output matrix is again, as expected, the outputs and inputs to the linear models are separable and independent of each other.
+
+If however, I nest these compound models:
+```python
+>>> separability_matrix(m.Pix2Sky_TAN() & cm)
+array([[ True,  True, False, False],
+       [ True,  True, False, False],
+       [False, False,  True,  True],
+       [False, False,  True,  True]])
+```
+Suddenly the inputs and outputs are no longer separable?
+
+This feels like a bug to me, but I might be missing something?
+
+diff --git a/astropy/modeling/separable.py b/astropy/modeling/separable.py
+--- a/astropy/modeling/separable.py
++++ b/astropy/modeling/separable.py
+@@ -242,7 +242,7 @@ def _cstack(left, right):
+         cright = _coord_matrix(right, 'right', noutp)
+     else:
+         cright = np.zeros((noutp, right.shape[1]))
+-        cright[-right.shape[0]:, -right.shape[1]:] = 1
++        cright[-right.shape[0]:, -right.shape[1]:] = right
+ 
+     return np.hstack([cleft, cright])
+ 
+
+
+Convert CCDData to ImageHDU
+### Description
+As far as I can tell, currently there's no way to directly convert a `CCDData` object to an `ImageHDU` object. If we write it to a file using `CCDData.write()` it will always create a file where the first HDU is a `PrimaryHDU` that contains the `CCDData.data`, followed by optionally some `ImageHDU`s that contain mask or uncertainty. If we instead use `CCDData.to_hdu()`, it will return an `HDUList` equivalent to the file it writes with `CCDData.write()`, that is, the `CCDData.data` is stored in the first element of the `HDUList`, which is always a `PrimaryHDU`.
+
+This is somewhat unexpected given that you can already do it the other way around (that is, convert a `ImageHDU` object to a `CCDData` object):
+
+```python
+fits.HDUList([
+    fits.PrimaryHDU(),
+    fits.ImageHDU(data=np.ones((2, 2))),
+    fits.ImageHDU(data=np.ones((5, 5)), header=fits.Header({'BUNIT': 'm'})),
+]).writeto('test.fits')  # create example file
+
+ccd_image = CCDData.read('test.fits', hdu=2)  # you can successfully read the 5x5 ImageHDU
+```
+The problem is that if we then want to use this `ccd_image` as an extension to another FITS file, there's no obvious way to get an `ImageHDU` which would allow us to do that.  As far as I can tell, there's also no trivial way to convert a `PrimaryHDU` to a `ImageHDU`. We could manually create a new `ImageHDU` by copying the data from the `PrimaryHDU`, as well as its relevant cards and so on... but this seems unnecessarily complicated.
+
+I propose the following interfaces:
+
+```python
+# Option A: add a new parameter to CCDData.to_hdu() for this functionality
+hdus = ccd_image.to_hdu(as_image_hdu=True)  # This returns a HDUList where the first element is an ImageHDU instead of a PrimaryHDU
+
+# Option B: create a new convenience function
+hdu = fits.ccddata_to_image_hdu(ccd_image) # This returns a single ImageHDU
+
+# Option C: allowing the user to append the image to an existing FITS file
+ccd_image.write('test.fits', append=True) # appends original ImageHDU to existing file
+```
+
+
+
+### Additional context
+This seems somewhat similar to the situation with `Table` and `BinTableHDU`. In that case, we can also specify an `hdu` parameter when reading:
+
+```python
+fits.BinTableHDU.from_columns([
+    fits.Column(name='test', format='J', array=(1, 2))
+]).writeto('table.fits')  # creates a new file with a PrimaryHDU followed by this BinTableHDU
+t = Table.read('table.fits', hdu=1) # reads the BinTableHDU as a Table
+```
+
+From here we can use:
+
+```python
+t.write('new_table.fits')  #  creates a new file with a PrimaryHDU followed by the original BinTableHDU
+t.write('existing_table.fits', append=True)  # appends original BinTableHDU to existing file
+hdu = fits.table_to_hdu(t)  # returns original BinTableHDU
+```
+
+diff --git a/astropy/nddata/ccddata.py b/astropy/nddata/ccddata.py
+--- a/astropy/nddata/ccddata.py
++++ b/astropy/nddata/ccddata.py
+@@ -270,7 +270,8 @@ def uncertainty(self, value):
+             self._uncertainty = value
+ 
+     def to_hdu(self, hdu_mask='MASK', hdu_uncertainty='UNCERT',
+-               hdu_flags=None, wcs_relax=True, key_uncertainty_type='UTYPE'):
++               hdu_flags=None, wcs_relax=True,
++               key_uncertainty_type='UTYPE', as_image_hdu=False):
+         """Creates an HDUList object from a CCDData object.
+ 
+         Parameters
+@@ -297,6 +298,11 @@ def to_hdu(self, hdu_mask='MASK', hdu_uncertainty='UNCERT',
+ 
+             .. versionadded:: 3.1
+ 
++        as_image_hdu : bool
++            If this option is `True`, the first item of the returned
++            `~astropy.io.fits.HDUList` is a `~astropy.io.fits.ImageHDU`, instead
++            of the default `~astropy.io.fits.PrimaryHDU`.
++
+         Raises
+         ------
+         ValueError
+@@ -343,7 +349,11 @@ def to_hdu(self, hdu_mask='MASK', hdu_uncertainty='UNCERT',
+             # not header.
+             wcs_header = self.wcs.to_header(relax=wcs_relax)
+             header.extend(wcs_header, useblanks=False, update=True)
+-        hdus = [fits.PrimaryHDU(self.data, header)]
++
++        if as_image_hdu:
++            hdus = [fits.ImageHDU(self.data, header)]
++        else:
++            hdus = [fits.PrimaryHDU(self.data, header)]
+ 
+         if hdu_mask and self.mask is not None:
+             # Always assuming that the mask is a np.ndarray (check that it has
+@@ -667,7 +677,8 @@ def fits_ccddata_reader(filename, hdu=0, unit=None, hdu_uncertainty='UNCERT',
+ 
+ def fits_ccddata_writer(
+         ccd_data, filename, hdu_mask='MASK', hdu_uncertainty='UNCERT',
+-        hdu_flags=None, key_uncertainty_type='UTYPE', **kwd):
++        hdu_flags=None, key_uncertainty_type='UTYPE', as_image_hdu=False,
++        **kwd):
+     """
+     Write CCDData object to FITS file.
+ 
+@@ -691,6 +702,11 @@ def fits_ccddata_writer(
+ 
+         .. versionadded:: 3.1
+ 
++    as_image_hdu : bool
++        If this option is `True`, the first item of the returned
++        `~astropy.io.fits.HDUList` is a `~astropy.io.fits.ImageHDU`, instead of
++        the default `~astropy.io.fits.PrimaryHDU`.
++
+     kwd :
+         All additional keywords are passed to :py:mod:`astropy.io.fits`
+ 
+@@ -708,7 +724,10 @@ def fits_ccddata_writer(
+     """
+     hdu = ccd_data.to_hdu(
+         hdu_mask=hdu_mask, hdu_uncertainty=hdu_uncertainty,
+-        key_uncertainty_type=key_uncertainty_type, hdu_flags=hdu_flags)
++        key_uncertainty_type=key_uncertainty_type, hdu_flags=hdu_flags,
++        as_image_hdu=as_image_hdu)
++    if as_image_hdu:
++        hdu.insert(0, fits.PrimaryHDU())
+     hdu.writeto(filename, **kwd)
+ 
+ 
+
+
+Incorrect ignored usage in `ModelBoundingBox`
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+<!-- Please check that the development version still produces the same bug.
+You can install development version with
+pip install git+https://github.com/astropy/astropy
+command. -->
+
+### Description
+<!-- Provide a general description of the bug. -->
+
+Providing `ignored` inputs to `ModelBoundingBox` does not always work as expected.
+
+Running the following code:
+```python
+from astropy.modeling.bounding_box import ModelBoundingBox
+from astropy.modeling import models as astropy_models
+
+bbox = ModelBoundingBox((9, 10), astropy_models.Polynomial2D(1), ignored=["x"])
+print(bbox)
+print(bbox.ignored_inputs)
+```
+Produces:
+```
+ModelBoundingBox(
+    intervals={
+        x: Interval(lower=9, upper=10)
+    }
+    model=Polynomial2D(inputs=('x', 'y'))
+    order='C'
+)
+[]
+```
+This is incorrect. It instead should produce:
+```
+ModelBoundingBox(
+    intervals={
+        y: Interval(lower=9, upper=10)
+    }
+    model=Polynomial2D(inputs=('x', 'y'))
+    order='C'
+)
+['x']
+```
+
+Somehow the `ignored` status of the `x` input is being accounted for during the validation which occurs during the construction of the bounding box; however, it is getting "lost" somehow resulting in the weird behavior we see above.
+
+Oddly enough ignoring `y` does not have an issue. E.G. this code:
+```python
+from astropy.modeling.bounding_box import ModelBoundingBox
+from astropy.modeling import models as astropy_models
+
+bbox = ModelBoundingBox((11, 12), astropy_models.Polynomial2D(1), ignored=["y"])
+print(bbox)
+print(bbox.ignored_inputs)
+```
+Produces:
+```
+ModelBoundingBox(
+    intervals={
+        x: Interval(lower=11, upper=12)
+    }
+    ignored=['y']
+    model=Polynomial2D(inputs=('x', 'y'))
+    order='C'
+)
+['y']
+```
+as expected.
+
+### System Details
+This is present in both astropy 5.03 and astropy develop
+
+
+diff --git a/astropy/modeling/bounding_box.py b/astropy/modeling/bounding_box.py
+--- a/astropy/modeling/bounding_box.py
++++ b/astropy/modeling/bounding_box.py
+@@ -694,6 +694,12 @@ def _validate_dict(self, bounding_box: dict):
+         for key, value in bounding_box.items():
+             self[key] = value
+ 
++    @property
++    def _available_input_index(self):
++        model_input_index = [self._get_index(_input) for _input in self._model.inputs]
++
++        return [_input for _input in model_input_index if _input not in self._ignored]
++
+     def _validate_sequence(self, bounding_box, order: str = None):
+         """Validate passing tuple of tuples representation (or related) and setting them."""
+         order = self._get_order(order)
+@@ -703,7 +709,7 @@ def _validate_sequence(self, bounding_box, order: str = None):
+             bounding_box = bounding_box[::-1]
+ 
+         for index, value in enumerate(bounding_box):
+-            self[index] = value
++            self[self._available_input_index[index]] = value
+ 
+     @property
+     def _n_inputs(self) -> int:
+@@ -727,7 +733,7 @@ def _validate_iterable(self, bounding_box, order: str = None):
+     def _validate(self, bounding_box, order: str = None):
+         """Validate and set any representation"""
+         if self._n_inputs == 1 and not isinstance(bounding_box, dict):
+-            self[0] = bounding_box
++            self[self._available_input_index[0]] = bounding_box
+         else:
+             self._validate_iterable(bounding_box, order)
+ 
+@@ -751,7 +757,7 @@ def validate(cls, model, bounding_box,
+             order = bounding_box.order
+             if _preserve_ignore:
+                 ignored = bounding_box.ignored
+-            bounding_box = bounding_box.intervals
++            bounding_box = bounding_box.named_intervals
+ 
+         new = cls({}, model, ignored=ignored, order=order)
+         new._validate(bounding_box)
+
+
+TimeSeries: misleading exception when required column check fails.
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+<!-- Please check that the development version still produces the same bug.
+You can install development version with
+pip install git+https://github.com/astropy/astropy
+command. -->
+
+### Description
+<!-- Provide a general description of the bug. -->
+
+For a `TimeSeries` object that has additional required columns (in addition to `time`), when codes mistakenly try to remove a required column, the exception it produces is misleading.
+
+### Expected behavior
+<!-- What did you expect to happen. -->
+An exception that informs the users required columns are missing.
+
+### Actual behavior
+The actual exception message is confusing:
+`ValueError: TimeSeries object is invalid - expected 'time' as the first columns but found 'time'`
+
+### Steps to Reproduce
+<!-- Ideally a code example could be provided so we can run it ourselves. -->
+<!-- If you are pasting code, use triple backticks (```) around
+your code snippet. -->
+<!-- If necessary, sanitize your screen output to be pasted so you do not
+reveal secrets like tokens and passwords. -->
+
+```python
+from astropy.time import Time
+from astropy.timeseries import TimeSeries
+
+time=Time(np.arange(100000, 100003), format='jd')
+ts = TimeSeries(time=time, data = {"flux": [99.9, 99.8, 99.7]})
+ts._required_columns = ["time", "flux"]                                   
+ts.remove_column("flux")
+
+```
+
+### System Details
+<!-- Even if you do not think this is necessary, it is useful information for the maintainers.
+Please run the following snippet and paste the output below:
+import platform; print(platform.platform())
+import sys; print("Python", sys.version)
+import numpy; print("Numpy", numpy.__version__)
+import erfa; print("pyerfa", erfa.__version__)
+import astropy; print("astropy", astropy.__version__)
+import scipy; print("Scipy", scipy.__version__)
+import matplotlib; print("Matplotlib", matplotlib.__version__)
+-->
+```
+Windows-10-10.0.22000-SP0
+Python 3.9.10 | packaged by conda-forge | (main, Feb  1 2022, 21:21:54) [MSC v.1929 64 bit (AMD64)]
+Numpy 1.22.3
+pyerfa 2.0.0.1
+astropy 5.0.3
+Scipy 1.8.0
+Matplotlib 3.5.1
+```
+
+diff --git a/astropy/timeseries/core.py b/astropy/timeseries/core.py
+--- a/astropy/timeseries/core.py
++++ b/astropy/timeseries/core.py
+@@ -55,6 +55,13 @@ class BaseTimeSeries(QTable):
+     _required_columns_relax = False
+ 
+     def _check_required_columns(self):
++        def as_scalar_or_list_str(obj):
++            if not hasattr(obj, "__len__"):
++                return f"'{obj}'"
++            elif len(obj) == 1:
++                return f"'{obj[0]}'"
++            else:
++                return str(obj)
+ 
+         if not self._required_columns_enabled:
+             return
+@@ -76,9 +83,10 @@ def _check_required_columns(self):
+ 
+             elif self.colnames[:len(required_columns)] != required_columns:
+ 
+-                raise ValueError("{} object is invalid - expected '{}' "
+-                                 "as the first column{} but found '{}'"
+-                                 .format(self.__class__.__name__, required_columns[0], plural, self.colnames[0]))
++                raise ValueError("{} object is invalid - expected {} "
++                                 "as the first column{} but found {}"
++                                 .format(self.__class__.__name__, as_scalar_or_list_str(required_columns),
++                                            plural, as_scalar_or_list_str(self.colnames[:len(required_columns)])))
+ 
+             if (self._required_columns_relax
+                     and self._required_columns == self.colnames[:len(self._required_columns)]):
+
+
+Time from astropy.time not precise
+Hello,
+
+I encounter difficulties with Time. I'm working on a package to perform photometry and occultation. 
+
+For this last case, data need times values accurately estimated. Of course, data coming from different camera will will have different time format in the header.
+
+to manage this without passing long time to build a time parser, i decided to use Time object which do exactly what i need. The problem is, i dont arrive to make accurate conversion between different format using Time.
+
+let's do an exemple:
+
+```
+t1 = '2022-03-24T23:13:41.390999'
+t1 = Time(t1, format = 'isot', precision = len(t1.split('.')[-1]))
+t2 = t1.to_value('jd')
+# result is 2459663.4678401737
+```
+now let's do reverse
+
+```
+t2 = Time(t2, format = 'jd', precision = len(str(t2).split('.')[-1]))
+t3 = t2.to_value('isot')
+# result is 2022-03-24T23:13:41.0551352177
+```
+as you can see i don't fall back on the same value and the difference is quite high. I would like to fall back on the original one.
+
+thank you in advance
+
+
+diff --git a/astropy/time/core.py b/astropy/time/core.py
+--- a/astropy/time/core.py
++++ b/astropy/time/core.py
+@@ -655,9 +655,6 @@ def precision(self):
+     @precision.setter
+     def precision(self, val):
+         del self.cache
+-        if not isinstance(val, int) or val < 0 or val > 9:
+-            raise ValueError('precision attribute must be an int between '
+-                             '0 and 9')
+         self._time.precision = val
+ 
+     @property
+diff --git a/astropy/time/formats.py b/astropy/time/formats.py
+--- a/astropy/time/formats.py
++++ b/astropy/time/formats.py
+@@ -230,6 +230,18 @@ def masked(self):
+     def jd2_filled(self):
+         return np.nan_to_num(self.jd2) if self.masked else self.jd2
+ 
++    @property
++    def precision(self):
++        return self._precision
++
++    @precision.setter
++    def precision(self, val):
++        #Verify precision is 0-9 (inclusive)
++        if not isinstance(val, int) or val < 0 or val > 9:
++            raise ValueError('precision attribute must be an int between '
++                             '0 and 9')
++        self._precision = val
++
+     @lazyproperty
+     def cache(self):
+         """
+
+
+Document reading True/False in ASCII table as bool not str
+<!-- This comments are hidden when you submit the issue,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- Please have a search on our GitHub repository to see if a similar
+issue has already been posted.
+If a similar issue is closed, have a quick look to see if you are satisfied
+by the resolution.
+If not please go ahead and open an issue! -->
+
+### Description
+<!-- Provide a general description of the feature you would like. -->
+<!-- If you want to, you can suggest a draft design or API. -->
+<!-- This way we have a deeper discussion on the feature. -->
+
+#12826 showed a use case for having an ASCII table column consisting of only "True" and "False" be read as `bool` instead of `str` (current behavior). That issue discusses reasons to maintain the current behavior, but there are simple workarounds discussed there that should be brought out to the narrative docs as examples for users.
+
+I'd suggest the following as a recommendation for users:
+```
+from astropy.io.ascii import convert_numpy
+converters = {'*': [convert_numpy(typ) for typ in (int, float, bool, str)]}
+
+# Then for example
+dat = Table.read(filename, format='ascii', converters=converters)
+```
+This new information could go in the existing section on `Converters` in the `io.ascii` read documentation.
+
+### Additional context
+<!-- Add any other context or screenshots about the feature request here. -->
+<!-- This part is optional. -->
+
+#12826
+Control dtype with ascii.read (converters API needs better doc or refactoring)
+I cannot find a way to control the dtype of the output table when reading a file into a `Table`. Consider the following MWE, with 3 numerical columns, while one of them would preferably be kept as a string:
+
+```
+>>> from astropy.io import ascii
+
+>>> indata = ("# This is a dummy file\n" 
+...           "# with some text to ignore, and a header with column names\n" 
+...           "# ra dec objid\n" 
+...           "1 2 345\n" 
+...           "3 4 456\n") 
+
+>>> ascii.read(indata, format='commented_header', header_start=2, guess=False, fast_reader=False)
+<Table length=2>
+  ra   dec  objid
+int64 int64 int64
+----- ----- -----
+    1     2   345
+    3     4   456
+
+>>> ascii.read(indata, format='commented_header', header_start=2, dtye=('i8', 'i8', 'S10'), guess=False, fast_reader=False)
+TypeError: __init__() got an unexpected keyword argument 'dtye'
+```
+
+Reading in the same with `np.loadtxt` and then converting to a Table works, but it should ideally be supported directly.
+
+```
+import numpy as np
+from astropy.table import Table
+
+>>> Table(np.loadtxt('/tmp/a', dtype=[('ra', 'i8'), ('dec', 'i8'), ('objid', 'S10')]))
+<Table length=2>
+  ra   dec   objid 
+int64 int64 bytes10
+----- ----- -------
+    1     2     345
+    3     4     456
+```
+
+diff --git a/astropy/io/ascii/core.py b/astropy/io/ascii/core.py
+--- a/astropy/io/ascii/core.py
++++ b/astropy/io/ascii/core.py
+@@ -1016,7 +1016,10 @@ class BaseOutputter:
+     """Output table as a dict of column objects keyed on column name.  The
+     table data are stored as plain python lists within the column objects.
+     """
++    # User-defined converters which gets set in ascii.ui if a `converter` kwarg
++    # is supplied.
+     converters = {}
++
+     # Derived classes must define default_converters and __call__
+ 
+     @staticmethod
+@@ -1024,18 +1027,33 @@ def _validate_and_copy(col, converters):
+         """Validate the format for the type converters and then copy those
+         which are valid converters for this column (i.e. converter type is
+         a subclass of col.type)"""
++        # Allow specifying a single converter instead of a list of converters.
++        # The input `converters` must be a ``type`` value that can init np.dtype.
++        try:
++            # Don't allow list-like things that dtype accepts
++            assert type(converters) is type
++            converters = [numpy.dtype(converters)]
++        except (AssertionError, TypeError):
++            pass
++
+         converters_out = []
+         try:
+             for converter in converters:
+-                converter_func, converter_type = converter
++                try:
++                    converter_func, converter_type = converter
++                except TypeError as err:
++                    if str(err).startswith('cannot unpack'):
++                        converter_func, converter_type = convert_numpy(converter)
++                    else:
++                        raise
+                 if not issubclass(converter_type, NoType):
+-                    raise ValueError()
++                    raise ValueError('converter_type must be a subclass of NoType')
+                 if issubclass(converter_type, col.type):
+                     converters_out.append((converter_func, converter_type))
+ 
+-        except (ValueError, TypeError):
++        except (ValueError, TypeError) as err:
+             raise ValueError('Error: invalid format for converters, see '
+-                             'documentation\n{}'.format(converters))
++                             f'documentation\n{converters}: {err}')
+         return converters_out
+ 
+     def _convert_vals(self, cols):
+diff --git a/astropy/io/ascii/docs.py b/astropy/io/ascii/docs.py
+--- a/astropy/io/ascii/docs.py
++++ b/astropy/io/ascii/docs.py
+@@ -37,9 +37,12 @@
+         Line index for the end of data not counting comment or blank lines.
+         This value can be negative to count from the end.
+     converters : dict
+-        Dictionary of converters. Keys in the dictionary are columns names,
+-        values are converter functions. In addition to single column names
+-        you can use wildcards via `fnmatch` to select multiple columns.
++        Dictionary of converters to specify output column dtypes. Each key in
++        the dictionary is a column name or else a name matching pattern
++        including wildcards. The value is either a data type such as ``int`` or
++        ``np.float32``; a list of such types which is tried in order until a
++        successful conversion is achieved; or a list of converter tuples (see
++        the `~astropy.io.ascii.convert_numpy` function for details).
+     data_Splitter : `~astropy.io.ascii.BaseSplitter`
+         Splitter class to split data columns
+     header_Splitter : `~astropy.io.ascii.BaseSplitter`
+
+
+Register format ``html`` to ``Cosmology.write`` with nice mathjax
+Cosmology can now read and write to files.
+It would be nice to register with ``Cosmology.write`` a  method for exporting a Cosmology to a HTML table.
+There are good examples of IO with Cosmology at https://github.com/astropy/astropy/tree/main/astropy/cosmology/io
+and documentation at https://docs.astropy.org/en/latest/cosmology/io.html#cosmology-io
+
+I'm thinking the ``write_html(...)`` method would call ``cosmology.io.table.to_table()``, format the table to nice MathJax or something and then call the `QTable.write(..., format='html')`.
+
+Edit: also, the mathjax representation of each parameter can be stored on the corresponding Parameter object, like how units have the ``format`` argument in [def_unit](https://docs.astropy.org/en/stable/api/astropy.units.def_unit.html#astropy.units.def_unit).
+
+diff --git a/astropy/cosmology/io/__init__.py b/astropy/cosmology/io/__init__.py
+--- a/astropy/cosmology/io/__init__.py
++++ b/astropy/cosmology/io/__init__.py
+@@ -5,4 +5,4 @@
+ """
+ 
+ # Import to register with the I/O machinery
+-from . import cosmology, ecsv, mapping, model, row, table, yaml
++from . import cosmology, ecsv, html, mapping, model, row, table, yaml  # noqa: F401
+diff --git a/astropy/cosmology/io/html.py b/astropy/cosmology/io/html.py
+new file mode 100644
+--- /dev/null
++++ b/astropy/cosmology/io/html.py
+@@ -0,0 +1,189 @@
++import astropy.cosmology.units as cu
++import astropy.units as u
++from astropy.cosmology.connect import readwrite_registry
++from astropy.cosmology.core import Cosmology
++from astropy.cosmology.parameter import Parameter
++from astropy.table import QTable
++
++from .table import from_table, to_table
++
++# Format look-up for conversion, {original_name: new_name}
++# TODO! move this information into the Parameters themselves
++_FORMAT_TABLE = {
++    "H0": "$$H_{0}$$",
++    "Om0": "$$\\Omega_{m,0}$$",
++    "Ode0": "$$\\Omega_{\\Lambda,0}$$",
++    "Tcmb0": "$$T_{0}$$",
++    "Neff": "$$N_{eff}$$",
++    "m_nu": "$$m_{nu}$$",
++    "Ob0": "$$\\Omega_{b,0}$$",
++    "w0": "$$w_{0}$$",
++    "wa": "$$w_{a}$$",
++    "wz": "$$w_{z}$$",
++    "wp": "$$w_{p}$$",
++    "zp": "$$z_{p}$$",
++}
++
++
++def read_html_table(filename, index=None, *, move_to_meta=False, cosmology=None, latex_names=True, **kwargs):
++    """Read a |Cosmology| from an HTML file.
++
++    Parameters
++    ----------
++    filename : path-like or file-like
++        From where to read the Cosmology.
++    index : int or str or None, optional
++        Needed to select the row in tables with multiple rows. ``index`` can be
++        an integer for the row number or, if the table is indexed by a column,
++        the value of that column. If the table is not indexed and ``index`` is a
++        string, the "name" column is used as the indexing column.
++
++    move_to_meta : bool, optional keyword-only
++        Whether to move keyword arguments that are not in the Cosmology class'
++        signature to the Cosmology's metadata. This will only be applied if the
++        Cosmology does NOT have a keyword-only argument (e.g. ``**kwargs``).
++        Arguments moved to the metadata will be merged with existing metadata,
++        preferring specified metadata in the case of a merge conflict (e.g. for
++        ``Cosmology(meta={'key':10}, key=42)``, the ``Cosmology.meta`` will be
++        ``{'key': 10}``).
++    cosmology : str or |Cosmology| class or None, optional keyword-only
++        The cosmology class (or string name thereof) to use when constructing
++        the cosmology instance. The class also provides default parameter
++        values, filling in any non-mandatory arguments missing in 'table'.
++    latex_names : bool, optional keyword-only
++        Whether the |Table| (might) have latex column names for the parameters
++        that need to be mapped to the correct parameter name -- e.g. $$H_{0}$$
++        to 'H0'. This is `True` by default, but can be turned off (set to
++        `False`) if there is a known name conflict (e.g. both an 'H0' and
++        '$$H_{0}$$' column) as this will raise an error. In this case, the
++        correct name ('H0') is preferred.
++    **kwargs : Any
++        Passed to :attr:`astropy.table.QTable.read`. ``format`` is set to
++        'ascii.html', regardless of input.
++
++    Returns
++    -------
++    |Cosmology| subclass instance
++
++    Raises
++    ------
++    ValueError
++        If the keyword argument 'format' is given and is not "ascii.html".
++    """
++    # Check that the format is 'ascii.html' (or not specified)
++    format = kwargs.pop("format", "ascii.html")
++    if format != "ascii.html":
++        raise ValueError(f"format must be 'ascii.html', not {format}")
++
++    # Reading is handled by `QTable`.
++    with u.add_enabled_units(cu):  # (cosmology units not turned on by default)
++        table = QTable.read(filename, format="ascii.html", **kwargs)
++
++    # Need to map the table's column names to Cosmology inputs (parameter
++    # names).
++    # TODO! move the `latex_names` into `from_table`
++    if latex_names:
++        table_columns = set(table.colnames)
++        for name, latex in _FORMAT_TABLE.items():
++            if latex in table_columns:
++                table.rename_column(latex, name)
++
++    # Build the cosmology from table, using the private backend.
++    return from_table(table, index=index, move_to_meta=move_to_meta, cosmology=cosmology)
++
++
++def write_html_table(cosmology, file, *, overwrite=False, cls=QTable, latex_names=False, **kwargs):
++    r"""Serialize the |Cosmology| into a HTML table.
++
++    Parameters
++    ----------
++    cosmology : |Cosmology| subclass instance file : path-like or file-like
++        Location to save the serialized cosmology.
++    file : path-like or file-like
++        Where to write the html table.
++
++    overwrite : bool, optional keyword-only
++        Whether to overwrite the file, if it exists.
++    cls : |Table| class, optional keyword-only
++        Astropy |Table| (sub)class to use when writing. Default is |QTable|
++        class.
++    latex_names : bool, optional keyword-only
++        Whether to format the parameters (column) names to latex -- e.g. 'H0' to
++        $$H_{0}$$.
++    **kwargs : Any
++        Passed to ``cls.write``.
++
++    Raises
++    ------
++    TypeError
++        If the optional keyword-argument 'cls' is not a subclass of |Table|.
++    ValueError
++        If the keyword argument 'format' is given and is not "ascii.html".
++
++    Notes
++    -----
++    A HTML file containing a Cosmology HTML table should have scripts enabling
++    MathJax.
++
++    ::
++        <script
++        src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
++        <script type="text/javascript" id="MathJax-script" async
++            src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
++        </script>
++    """
++    # Check that the format is 'ascii.html' (or not specified)
++    format = kwargs.pop("format", "ascii.html")
++    if format != "ascii.html":
++        raise ValueError(f"format must be 'ascii.html', not {format}")
++
++    # Set cosmology_in_meta as false for now since there is no metadata being kept
++    table = to_table(cosmology, cls=cls, cosmology_in_meta=False)
++
++    cosmo_cls = type(cosmology)
++    for name, col in table.columns.items():
++        param = getattr(cosmo_cls, name, None)
++        if not isinstance(param, Parameter) or param.unit in (None, u.one):
++            continue
++        # Replace column with unitless version
++        table.replace_column(name, (col << param.unit).value, copy=False)
++
++    # TODO! move the `latex_names` into `to_table`
++    if latex_names:
++        new_names = [_FORMAT_TABLE.get(k, k) for k in cosmology.__parameters__]
++        table.rename_columns(cosmology.__parameters__, new_names)
++
++    # Write HTML, using table I/O
++    table.write(file, overwrite=overwrite, format="ascii.html", **kwargs)
++
++
++def html_identify(origin, filepath, fileobj, *args, **kwargs):
++    """Identify if an object uses the HTML Table format.
++
++    Parameters
++    ----------
++    origin : Any
++        Not used.
++    filepath : str or Any
++        From where to read the Cosmology.
++    fileobj : Any
++        Not used.
++    *args : Any
++        Not used.
++    **kwargs : Any
++        Not used.
++
++    Returns
++    -------
++    bool
++        If the filepath is a string ending with '.html'.
++    """
++    return isinstance(filepath, str) and filepath.endswith(".html")
++
++
++# ===================================================================
++# Register
++
++readwrite_registry.register_reader("ascii.html", Cosmology, read_html_table)
++readwrite_registry.register_writer("ascii.html", Cosmology, write_html_table)
++readwrite_registry.register_identifier("ascii.html", Cosmology, html_identify)
+
+
+Add __array_func__ for astropy.time.Time
+<!-- This comments are hidden when you submit the pull request,
+so you do not need to remove them! -->
+
+<!-- Please be sure to check out our contributing guidelines,
+https://github.com/astropy/astropy/blob/main/CONTRIBUTING.md .
+Please be sure to check out our code of conduct,
+https://github.com/astropy/astropy/blob/main/CODE_OF_CONDUCT.md . -->
+
+<!-- If you are new or need to be re-acquainted with Astropy
+contributing workflow, please see
+http://docs.astropy.org/en/latest/development/workflow/development_workflow.html .
+There is even a practical example at
+https://docs.astropy.org/en/latest/development/workflow/git_edit_workflow_examples.html#astropy-fix-example . -->
+
+<!-- Astropy coding style guidelines can be found here:
+https://docs.astropy.org/en/latest/development/codeguide.html#coding-style-conventions
+Our testing infrastructure enforces to follow a subset of the PEP8 to be
+followed. You can check locally whether your changes have followed these by
+running the following command:
+
+tox -e codestyle
+
+-->
+
+<!-- Please just have a quick search on GitHub to see if a similar
+pull request has already been posted.
+We have old closed pull requests that might provide useful code or ideas
+that directly tie in with your pull request. -->
+
+<!-- We have several automatic features that run when a pull request is open.
+They can appear daunting but do not worry because maintainers will help
+you navigate them, if necessary. -->
+
+### Description
+<!-- Provide a general description of what your pull request does.
+Complete the following sentence and add relevant details as you see fit. -->
+
+<!-- In addition please ensure that the pull request title is descriptive
+and allows maintainers to infer the applicable subpackage(s). -->
+
+<!-- READ THIS FOR MANUAL BACKPORT FROM A MAINTAINER:
+Apply "skip-basebranch-check" label **before** you open the PR! -->
+
+xref https://github.com/astropy/astropy/issues/8610. This provides some numpy array functions for `Time` objects. Most notably, one can now do the following without an errror(!):
+```python
+from astropy.time import Time, TimeDelta
+import numpy as np
+
+t0 = Time('2021-01-01')
+t1 = Time('2022-01-01')
+
+times = np.linspace(t0, t1, num=50)
+```
+
+This still needs:
+- [ ] Tests
+- [ ] What's new
+- [ ] API docs???
+
+but opening now for feedback and a full CI run.
+
+<!-- If the pull request closes any open issues you can add this.
+If you replace <Issue Number> with a number, GitHub will automatically link it.
+If this pull request is unrelated to any issues, please remove
+the following line. -->
+
+### Checklist for package maintainer(s)
+<!-- This section is to be filled by package maintainer(s) who will
+review this pull request. -->
+
+This checklist is meant to remind the package maintainer(s) who will review this pull request of some common things to look for. This list is not exhaustive.
+
+- [x] Do the proposed changes actually accomplish desired goals?
+- [ ] Do the proposed changes follow the [Astropy coding guidelines](https://docs.astropy.org/en/latest/development/codeguide.html)?
+- [ ] Are tests added/updated as required? If so, do they follow the [Astropy testing guidelines](https://docs.astropy.org/en/latest/development/testguide.html)?
+- [ ] Are docs added/updated as required? If so, do they follow the [Astropy documentation guidelines](https://docs.astropy.org/en/latest/development/docguide.html#astropy-documentation-rules-and-guidelines)?
+- [ ] Is rebase and/or squash necessary? If so, please provide the author with appropriate instructions. Also see ["When to rebase and squash commits"](https://docs.astropy.org/en/latest/development/when_to_rebase.html).
+- [ ] Did the CI pass? If
