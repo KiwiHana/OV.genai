@@ -123,6 +123,7 @@ def main():
         "OFFLOAD_RATIO":40,
         "WEIGHTS_PATH" : models_path + "/openvino_language_model.bin" }
         ## "WEIGHTS_PATH" : r"C:\Users\admin\Documents\model\Qwen3.6-35B-A3B-ov\openvino_language_model.bin"
+        print("ov_config = ",ov_config)
         pipe = ov_genai.VLMPipeline(models_path, device, scheduler_config=scheduler_config,**ov_config)
 
     input_data = pipe.get_tokenizer().encode(prompt)
